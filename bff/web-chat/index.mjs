@@ -51,7 +51,7 @@ import { adminMfaGate, apiMyMfa, apiResetUserMfa } from "./mfa.mjs";
 import { apiResetUserPassword, apiSetUserEmail } from "./passwords.mjs";
 import { apiListRoles, apiSaveRole, apiDeleteRole, apiListUsers, apiPutUser, apiGetModules, apiPutModules, apiAllCapabilities, apiCreateUser, apiDeleteUser, apiListGroups, apiPutGroupMap, apiCreateGroup, apiDeleteGroup, apiListGroupMembers, apiAddUserToGroup, apiRemoveUserFromGroup, apiGetEol, apiPutEol } from "./admin.mjs";
 import { isAccountVisible, filterVisibleAccounts, visibleAccountSet, listVisibility, getVisibility, putVisibility, deleteVisibility } from "./account_visibility.mjs";
-import { listMemberAccounts, onboardAccount, onboardStatus, setAccountEnabled, offboardAccount, associateDevopsAgent, devopsAgentAssocStatus, generateLaunchStackUrl, manualPayloadSave, testDaConnection, inspectionCrossAccountStatus, verifyAndRegisterCollectionRole, generateCollectionStackUrl, oneClickOnboardAvailable, associateInspectionSource } from "./member_accounts.mjs";
+import { listMemberAccounts, onboardAccount, onboardStatus, setAccountEnabled, offboardAccount, associateDevopsAgent, devopsAgentAssocStatus, generateLaunchStackUrl, manualPayloadSave, testDaConnection, inspectionCrossAccountStatus, verifyAndRegisterCollectionRole, generateCollectionStackUrl, oneClickOnboardAvailable, associateInspectionSource, registerExternalReadRole } from "./member_accounts.mjs";
 import { apiGetNotificationConfig, apiPutNotificationConfig, apiTestNotificationSend } from "./feishu_config.mjs";
 import { apiGetDingtalkConfig, apiPutDingtalkConfig, apiTestDingtalkSend } from "./dingtalk_config.mjs";
 import { apiGetSlackConfig, apiPutSlackConfig, apiTestSlackSend } from "./slack_config.mjs";
@@ -557,6 +557,9 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
           // 部署账号的巡检范围（2026-09-07 起可配）—— UI 在列表顶部钉一行。
           deployAccount: r.deployAccount || null,
         });
+      }
+      if (method === "POST" && path.endsWith("/admin/member-accounts/external-role")) {
+        return json(200, await registerExternalReadRole(authBody.accountId, authBody.roleName));
       }
       if (method === "POST" && path.endsWith("/admin/member-accounts")) {
         const r = await onboardAccount(authBody.accountId, authBody.regions);

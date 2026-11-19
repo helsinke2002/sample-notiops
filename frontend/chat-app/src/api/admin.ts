@@ -509,6 +509,9 @@ export async function saveManualPayload(accountId: string, payload: {
 }): Promise<{ status: string; message: string }> {
   return req("PUT", `/admin/member-accounts/${encodeURIComponent(accountId)}/payload`, payload);
 }
+export async function registerExternalReadRole(accountId: string, roleName: string): Promise<{ ok: boolean; accountId: string; roleArn: string }> {
+  return req("POST", "/admin/member-accounts/external-role", { accountId, roleName });
+}
 /**
  * 测试跨账号连接（AssumeRole → GetAgentSpace）。
  *

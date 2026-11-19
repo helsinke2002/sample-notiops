@@ -34,7 +34,7 @@ import {
   putDingtalkConfig, testDingtalkSend,
   putSlackConfig, testSlackSend,
   fetchAliyunConfig, putAliyunConfig,
-  generateLaunchStack, saveManualPayload, testDaConnection,
+  generateLaunchStack, saveManualPayload, testDaConnection, registerExternalReadRole,
   type FullCapabilityNode, type RoleRec, type UserRec, type ModuleToggle, type GroupRec, type EolMap,
   type MemberAccountRec, type AccountVisibilityRec,
 } from "../api/admin";
@@ -2448,6 +2448,7 @@ export function AccountsView() {
                  无关的可见性配置，唯一能用的接入入口反而在最下面。 */}
           <div style={{ borderTop: "1px solid var(--line)", padding: "10px 0 4px" }}>
             <CrossPayerSection onDone={reload} />
+            <ExternalRoleSection onDone={reload} />
           </div>
         </div>
         {target && (
@@ -2516,6 +2517,33 @@ export function AccountsView() {
       </div>
 
       {/* ── 跨 Payer 接入(组织外账号) ── */}
+    </div>
+  );
+}
+
+function ExternalRoleSection({ onDone }: { onDone: () => void }) {
+  const [accountId, setAccountId] = useState("");
+  const [roleName, setRoleName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      const r = await registerExternalReadRole(accountId.trim(), roleName.trim());
+      setMsg({ ok: true, text: `已登记 ${r.roleArn}` });
+      onDone();
+    } catch (e) { setMsg({ ok: false, text: String((e as Error)?.message || e) }); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div style={{ ...box, padding: 16, marginTop: 16, maxWidth: 640, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontWeight: 600 }}>按已有角色接入（只读）</div>
+      <input style={inputStyle} value={accountId} onChange={(e) => setAccountId(e.target.value)} placeholder="目标账户 ID，12 位" />
+      <input style={inputStyle} value={roleName} onChange={(e) => setRoleName(e.target.value)} placeholder="目标角色名，例如 Wangsu-Seaga" />
+      <button style={btnPrimary} disabled={saving || !accountId.trim() || !roleName.trim()} onClick={save}>
+        {saving ? "..." : "保存"}
+      </button>
+      {msg && <div style={msg.ok ? okText : errText}>{msg.text}</div>}
     </div>
   );
 }

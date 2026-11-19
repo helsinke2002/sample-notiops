@@ -1965,3 +1965,37 @@ export async function generateCollectionStackUrl(accountId) {
     expectedRoleArn: collectionRoleArn(id, sysAcct),
   };
 }
+
+/** 登记目标账号里已经存在的只读角色。不部署 CloudFormation，也不创建 Agent Space。 */
+export async function registerExternalReadRole(accountId, roleName) {
+  const id = String(accountId || "").trim();
+  const name = String(roleName || "").trim();
+  if (!/^[0-9]{12}$/.test(id)) {
+    throw Object.assign(new Error("invalid_account_id"), { code: "bad_request" });
+  }
+  if (!/^[\w+=,.@-]{1,64}$/.test(name)) {
+    throw Object.assign(new Error("invalid_role_name"), { code: "bad_request" });
+  }
+  const roleArn = `arn:aws:iam::${id}:role/${name}`;
+  const { STSClient, AssumeRoleCommand } = await import("@aws-sdk/client-sts");
+  const sts = new STSClient({});
+  try {
+    await sts.send(new AssumeRoleCommand({
+      RoleArn: roleArn,
+      RoleSessionName: "notiops-verify-external-role",
+      DurationSeconds: 900,
+    }));
+  } catch (e) {
+    const err = new Error(`AssumeRole ${roleArn} 失败：${e?.name || e}`);
+    err.code = "cross_account_unavailable";
+    throw err;
+  }
+  await putConfigAccount(id, {
+    role_arn: roleArn,
+    enabled: true,
+    onboard_source: "external_role",
+    account_name: name,
+    regions: ["*"],
+  });
+  return { ok: true, accountId: id, roleArn };
+}
