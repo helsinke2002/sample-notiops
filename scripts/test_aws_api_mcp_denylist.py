@@ -60,6 +60,7 @@ MUST_DENY = [
     "aws kms generate-random --number-of-bytes 32",
     "aws ecr get-login-password --region us-east-1",
     "aws ecr-public get-login-password",
+    "aws sts assume-role --role-arn arn:aws:iam::730021562252:role/Wangsu-Seaga --role-session-name s",
     # 变形：全局参数在服务名之前、大小写、多余空白、引号
     "aws --region us-east-1 secretsmanager get-secret-value --secret-id x",
     "AWS SECRETSMANAGER GET-SECRET-VALUE --secret-id x",

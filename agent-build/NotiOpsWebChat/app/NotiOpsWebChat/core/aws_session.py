@@ -113,6 +113,30 @@ def _is_locked_out(account_id: str) -> bool:
     return bool(deploy) and str(account_id) != deploy  # 默认只允许部署账号
 
 
+def _iam_role_account(role_arn: str) -> str:
+    """IAM role ARN 的账号段。形状不对返回空串（调用方必须拒绝，不能 Assume）。"""
+    parts = str(role_arn or "").strip().split(":")
+    if len(parts) < 6 or parts[0] != "arn" or parts[2] != "iam":
+        return ""
+    return parts[4]
+
+
+def _registry_row(account_id: str) -> dict | None:
+    """config 表 `account#<id> / meta`。没有这一行返回 {}；读失败返回 None（调用方拒绝）。"""
+    try:
+        # 直接读 config 表（自包含 —— 事故教训：shared.queries 从未随 agent 打包，
+        # "No module named shared" 被静默吞掉、历史上走了错误的无后缀角色名回退）。
+        table = os.environ.get("CONFIG_TABLE", "notiops-config")
+        item = boto3.client("dynamodb").get_item(
+            TableName=table,
+            Key={"PK": {"S": f"account#{account_id}"}, "SK": {"S": "meta"}},
+        ).get("Item")
+        return item or {}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("config lookup(%s) failed — refusing cross-account: %s", account_id, e)
+        return None
+
+
 def _role_arn_for(account_id: str) -> str | None:
     """取目标账号的 AssumeRole ARN：**只信 config 表条目的 role_arn**。
 
@@ -124,25 +148,38 @@ def _role_arn_for(account_id: str) -> str | None:
     `enabled` 这一条 2026-10-23 补上（待办 #38 ⑤）：IM 那份 `core/aws_session.py::role_arn_for` 早就查它，
     这一份漏了 —— 停用的成员账号从账号下拉里消失了，但在问题里点名它的 12 位账号号，agent 照样
     AssumeRole 进去查。
+
+    账号段必须等于目标账号。按已有角色接入写的是客户自己的角色名，没有 `notiops-*` 前缀可核对，
+    账号段是唯一还成立的判据。
     """
-    try:
-        # 直接读 config 表（自包含 —— 事故教训：shared.queries 从未随 agent 打包，
-        # "No module named shared" 被静默吞掉、历史上走了错误的无后缀角色名回退）。
-        table = os.environ.get("CONFIG_TABLE", "notiops-config")
-        item = boto3.client("dynamodb").get_item(
-            TableName=table,
-            Key={"PK": {"S": f"account#{account_id}"}, "SK": {"S": "meta"}},
-        ).get("Item")
-        if item and item.get("enabled", {}).get("BOOL") is not True:
-            logger.info("account %s is not enabled in the registry — refusing cross-account access", account_id)
-            return None
-        role_arn = item and item.get("role_arn", {}).get("S")
-        if role_arn:
-            return str(role_arn)
+    item = _registry_row(account_id)
+    if item is None:
+        return None
+    if item and item.get("enabled", {}).get("BOOL") is not True:
+        logger.info("account %s is not enabled in the registry — refusing cross-account access", account_id)
+        return None
+    role_arn = str((item.get("role_arn") or {}).get("S") or "").strip()
+    if not role_arn:
         logger.warning("account %s has no role_arn in config (not onboarded?) — refusing", account_id)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("config lookup(%s) failed — refusing cross-account: %s", account_id, e)
-    return None
+        return None
+    if _iam_role_account(role_arn) != str(account_id):
+        logger.error("role_arn account segment does not match %s — refusing: %s", account_id, role_arn)
+        return None
+    return role_arn
+
+
+def _external_read_bypasses_lock(account_id: str) -> bool:
+    """单账号闸门的唯一例外：管理页「按已有角色接入」写过的那一行。
+
+    `NOTIOPS_ALLOW_CROSS_ACCOUNT` 仍关着时，组织接入 / 手动回填的账号继续拒绝。
+    这里只认 `onboard_source=external_role` 且已启用。角色 ARN 对不对交给 `_role_arn_for`。
+    """
+    item = _registry_row(account_id)
+    if not item:
+        return False
+    if item.get("enabled", {}).get("BOOL") is not True:
+        return False
+    return (item.get("onboard_source") or {}).get("S") == "external_role"
 
 
 def get_session(account_id: str | None = None):
@@ -158,8 +195,8 @@ def get_session(account_id: str | None = None):
     if not acct or (deploy and acct == deploy):
         return boto3.Session()
 
-    # 跨账号闸门
-    if _is_locked_out(acct):
+    # 跨账号闸门。按已有角色接入是管理页上的显式登记，不跟着整站多账号开关走。
+    if _is_locked_out(acct) and not _external_read_bypasses_lock(acct):
         logger.info("cross-account disabled (LOCKED_ACCOUNT_ID); refusing account %s", acct)
         return None
 

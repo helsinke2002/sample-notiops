@@ -1516,6 +1516,15 @@ export class NotiOpsWebChatStandaloneStack extends cdk.Stack {
       ],
     });
     (runtimeCrossAccount.node.defaultChild as cdk.CfnResource).cfnOptions.condition = isMultiAccount;
+    // 按已有角色接入不依赖多账号模式：单账号部署下上面那份策略整块不存在，
+    // 客户登记了 Wangsu-Seaga 这种角色名，聊天仍 Assume 不进去。这条始终在。
+    // 角色名无法在合成期枚举，资源只能是 role/*；运行时只代注册表里
+    // onboard_source=external_role 且账号段一致的 ARN。
+    runtimeRole.addToPolicy(new iam.PolicyStatement({
+      sid: "AssumeExternalReadRole",
+      actions: ["sts:AssumeRole"],
+      resources: [`arn:${this.partition}:iam::*:role/*`],
+    }));
 
     const runtime = new cdk.CfnResource(this, "AgentRuntime", {
       type: "AWS::BedrockAgentCore::Runtime",

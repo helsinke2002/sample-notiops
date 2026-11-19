@@ -305,6 +305,9 @@ _DENY_PATTERNS: tuple[tuple[str, ...], ...] = (
     # 返回可直接用的 registry 凭证
     ("ecr", "get-login-password"),
     ("ecr-public", "get-login-password"),
+    # 执行角色有 sts:AssumeRole（含按已有角色接入的 role/*）。这条如果从 call_aws 放行，
+    # 模型就能自己代任意信任本角色的角色，绕过注册表。
+    ("sts", "assume-role"),
 )
 # SSM 参数只在**要求解密**时才拦：读一个 String 类型参数是正常运维动作。
 _DENY_SSM_DECRYPT = ("get-parameter", "get-parameters", "get-parameters-by-path")

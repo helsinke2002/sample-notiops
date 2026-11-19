@@ -381,6 +381,15 @@ export class AgentCoreStack extends Stack {
           'arn:aws:iam::*:role/notiops-cross-account-role-*',
         ],
       }));
+      // 按已有角色接入（registerExternalReadRole）：角色名由客户指定，对不上上面的
+      // notiops-* 前缀。代码只 Assume 注册表里 onboard_source=external_role、且 ARN
+      // 账号段等于目标账号的那一条；call_aws 的 denylist 另拦 sts assume-role，
+      // 避免模型用这条权限自己去代任意角色。
+      env.runtime.role.addToPrincipalPolicy(new iam.PolicyStatement({
+        sid: 'AssumeExternalReadRole',
+        actions: ['sts:AssumeRole'],
+        resources: ['arn:aws:iam::*:role/*'],
+      }));
 
       // 跨账号取数前需先读 config 表拿目标账号的 role_arn（core/aws_session._role_arn_for）。
       // 缺此权限的事故：读 config 被拒 → _role_arn_for 返回 None → 工具报 cross_account_unavailable

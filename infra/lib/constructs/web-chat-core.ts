@@ -1069,6 +1069,15 @@ export function createWebChatCore(scope: Construct, props: WebChatCoreProps): We
       ],
     }),
   );
+  // 按已有角色接入的校验 AssumeRole（member_accounts.registerExternalReadRole）。
+  // 角色名是客户现成的，不在上面三条前缀里。只给登记那一次用；聊天取数走 runtime 角色上的同名语句。
+  bff.addToRolePolicy(
+    new iam.PolicyStatement({
+      sid: "AssumeExternalReadRole",
+      actions: ["sts:AssumeRole"],
+      resources: ["arn:aws:iam::*:role/*"],
+    }),
+  );
 
   // BFF 需要调 AgentCore Runtime；StopRuntimeSession = 输入框「停止」真停掉 runtime 里那一轮
   // （待办 #30 第 ③ 档：不停的话那一轮照样跑完、照样烧 token，用户紧接着发下一句就撞「会话忙」）。
